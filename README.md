@@ -1,4 +1,4 @@
-Starling-WebcamVideo
+Starling-Video
 ====================
 
 A Video is a Quad with a texture mapped onto it.
