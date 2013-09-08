@@ -117,7 +117,7 @@
 		private var mStatsUploadTime:Vector.<uint> = new Vector.<uint>();
 		private var mStream:NetStream;
 		private var mStreamPlaying:Boolean = false;
-		private var mTexture:ConcreteTexture;
+		private var mTexture:starling.textures.Texture;
 		private var mTextureClass:Class;
 		private var mTime:uint;
 		private var mVertexDataCache:VertexData;
@@ -145,6 +145,7 @@
             mStream.addEventListener(AsyncErrorEvent.ASYNC_ERROR, asyncErrorHandler);
 			mStream.client = {};
 			mStream.client.onMetaData = netStream_onMetaData;
+			mStream.client.onXMPData = netStream_onXMPMetaData;
 			
 			if (rect == null)
 				rect = new Rectangle(0, 0, mVideo.width, mVideo.height);
@@ -289,7 +290,7 @@
 			if (!mVideo) return;
 			
 			mTime = getTimer();
-						
+			
 			mBitmapData.draw(mVideo, mFrameMatrix);
 			mStatsDrawTime.unshift(getTimer() - mTime);
 			
@@ -302,8 +303,7 @@
 		}
 		
 		private function netStatusHandler(event:NetStatusEvent):void {
-			
-            switch (event.info.code) {
+			switch (event.info.code) {
 				
 				case "NetConnection.Call.BadVersion":
 					//Packet encoded in an unidentified format.
@@ -389,6 +389,7 @@
 					break;
 				case "NetStream.Buffer.Full":
 					//The buffer is full and the stream begins playing.
+					mStreamPlaying = true;
 					break;
 				case "NetStream.Connect.Closed":
 					//The P2P connection was closed successfully. The info.stream property indicates which stream has closed. Note: Not supported in AIR 3.0 for iOS.
@@ -511,7 +512,6 @@
 					break;
 				case "NetStream.Video.DimensionChange":
 					//The video dimensions are available or have changed. Use the Video or StageVideo videoWidth/videoHeight property to query the new video dimensions. New in Flash Player 11.4/AIR 3.4.
-					
 					resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
 					break;
 				default:
@@ -523,6 +523,13 @@
 			disposeVideo();
 			setupVideo(item.width, item.height);
 			resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
+			onVideoChange();
+		}
+		private function netStream_onXMPMetaData(item:Object):void {
+			disposeVideo();
+			setupVideo(item.width, item.height);
+			resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
+			onVideoChange();
 		}
 		
 		/** Adds or removes the EventListeners for drawing the texture. */
@@ -530,6 +537,7 @@
 		{
 			if (!mTexture)
 				readjustSize();
+				
 			if (mActive && (mAddedToStage || mForceRecording)) {
 				mVideo.addEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler, false, 0, true);
 			} else {
@@ -580,16 +588,17 @@
 			}
 			mFrame = newFrame;
 			mFrameMatrix = new Matrix(1, 0, 0, 1, -mFrame.x, -mFrame.y);
-			if (!mVertexData)
-				return;
-			mVertexData.setPosition(0, 0.0, 0.0);
-			mVertexData.setPosition(1, mFrame.width, 0.0);
-			mVertexData.setPosition(2, 0.0, mFrame.height);
-			mVertexData.setPosition(3, mFrame.width, mFrame.height);
-			onVertexDataChanged();
+			
+			if (mVertexData){
+				mVertexData.setPosition(0, 0.0, 0.0);
+				mVertexData.setPosition(1, mFrame.width, 0.0);
+				mVertexData.setPosition(2, 0.0, mFrame.height);
+				mVertexData.setPosition(3, mFrame.width, mFrame.height);
+				onVertexDataChanged();
+			}
 			
 			if (!texture)
-				_texture = starling.textures.Texture.fromBitmapData(mBitmapData, false) as ConcreteTexture;
+				_texture = starling.textures.Texture.fromBitmapData(mBitmapData, false) as starling.textures.Texture;
 			
 			dispatchEventWith(starling.events.Event.RESIZE, false);
 		}
@@ -619,7 +628,7 @@
 		 */
 		public function resizeVideo(width:int = WIDTH, height:int = HEIGHT):void {
 			if (width <= 0 || height <= 0) return;
-			if(width != mVideo.width || height != mVideo.height){
+			if(width != mVideo.width || height != mVideo.height || mFrame.width != mVideo.width || mFrame.height != mVideo.height){
 				disposeVideo();
 				setupVideo(width, height)
 				var rect:Rectangle = new Rectangle(0, 0, mVideo.width, mVideo.height);
@@ -713,7 +722,6 @@
 				return;
 			mNewFrameAvailable = mStream.decodedFrames != mDecodedFrames;
 			mDecodedFrames = mStream.decodedFrames;
-			
 			if (mStreamPlaying && mNewFrameAvailable) {
 				dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.VIDEO_FRAME);
 				if (mRecording){
@@ -879,12 +887,12 @@
 		/** The texture with the video image. Can be used in other DisplayObjects then the Video as well.
 		 *  Note: The texture will never be transformed by the use of flipHorizontal/flipVertical.
 		 */
-		public function get texture():ConcreteTexture
+		public function get texture():starling.textures.Texture
 		{
 			return mTexture;
 		}
 		
-		private function set _texture(value:ConcreteTexture):void
+		private function set _texture(value:starling.textures.Texture):void
 		{
 			if (value == null)
 			{
