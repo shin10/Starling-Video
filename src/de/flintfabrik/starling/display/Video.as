@@ -98,19 +98,26 @@
 		private var mActive:Boolean = true;
 		private var mAddedToStage:Boolean = false;
 		private var mAlpha:Boolean = false;
+		private var mAutoResumeAfterSeekComplete:Boolean = false;
 		private var mAutoStartAfterHandledLostContext:Boolean = false;
 		private var mBitmapData:BitmapData;
 		private var mContextLost:Boolean = false;
+		private var mCurrentFrame:int = 0;
 		private var mDecodedFrames:int = 0;
+		private var mDecodedFramesOffset:int = 0;
+		private var mDroppedFramesOffset:int = 0;
 		private var mFlipHorizontal:Boolean = false;
 		private var mFlipVertical:Boolean = false;
 		private var mForceRecording:Boolean = false;
 		private var mFrame:Rectangle = new Rectangle();
 		private var mFrameMatrix:Matrix = new Matrix();
+		private var mLastFrame:int = 0;
+		private var mMetaData:Object = { };
 		private var mNativeApplicationClass:Class;
 		private var mNewFrameAvailable:Boolean = false;
 		private var mRecording:Boolean = true;
 		private var mSmoothing:String = TextureSmoothing.TRILINEAR;
+		private var mStartKeyframe:int = 0;
 		private var mStatsDrawnFrames:uint = 0;
 		private var mStatsDrawTime:Vector.<uint> = new Vector.<uint>();
 		private var mStatsUploadedFrames:uint = 0;
@@ -284,7 +291,7 @@
 			if (!contextStatus)
 				return;
 			
-			if (!mStreamPlaying)
+			if (!mNewFrameAvailable)
 				return;
 				
 			if (!mVideo) return;
@@ -298,11 +305,13 @@
 				mStatsDrawTime.pop();
 			
 			mNewFrameAvailable = false;
+			mLastFrame = mCurrentFrame;
 			++mStatsDrawnFrames;
 			dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.DRAW_COMPLETE);
 		}
 		
 		private function netStatusHandler(event:NetStatusEvent):void {
+			
 			switch (event.info.code) {
 				
 				case "NetConnection.Call.BadVersion":
@@ -389,7 +398,6 @@
 					break;
 				case "NetStream.Buffer.Full":
 					//The buffer is full and the stream begins playing.
-					mStreamPlaying = true;
 					break;
 				case "NetStream.Connect.Closed":
 					//The P2P connection was closed successfully. The info.stream property indicates which stream has closed. Note: Not supported in AIR 3.0 for iOS.
@@ -442,8 +450,8 @@
 					mStreamPlaying = true;
 					break;
 				case "NetStream.Play.Stop":
-					//Playback has stopped.
 					mStreamPlaying = false;
+					//Playback has stopped.
 					break;
 				case "NetStream.Play.StreamNotFound":
 					//The file passed to the NetStream.play() method can't be found.
@@ -479,6 +487,11 @@
 				case "NetStream.Record.Stop":
 					//Recording stopped.
 					break;
+				case "NetStream.Seek.Complete":
+					//The seek fails, which happens if the stream is not seekable.
+					mStartKeyframe = getNearestKeyframe();
+					if (mAutoResumeAfterSeekComplete) mStream.resume();
+					break;
 				case "NetStream.Seek.Failed":
 					//The seek fails, which happens if the stream is not seekable.
 					break;
@@ -487,6 +500,8 @@
 					break;
 				case "NetStream.Seek.Notify":
 					//The seek operation is complete. Sent when NetStream.seek() is called on a stream in AS3 NetStream Data Generation Mode. The info object is extended to include info.seekPoint which is the same value passed to NetStream.seek().
+					mAutoResumeAfterSeekComplete = mStreamPlaying || currentFrame >= totalFrames;
+					if(mAutoResumeAfterSeekComplete) mStream.pause();
 					break;
 				case "NetStream.Step.Notify":
 					//The step operation is complete. Note: Not supported in AIR 3.0 for iOS.
@@ -516,20 +531,41 @@
 					break;
 				default:
 					break;
-            }
-        }
+			}
+		}
+		
+		private function getNearestKeyframe():int {
+			var idx:int = 0;
+			var keytimes:Array = mMetaData.seekpoints;
+			var second:Number = mStream.time;
+			
+			if (!keytimes || !keytimes.length) {
+				return -1;
+			}
+			while(idx < keytimes.length && keytimes[idx].time < second){
+				++idx;
+			}
+			mDecodedFramesOffset = mStream.decodedFrames;
+			mDroppedFramesOffset = mStream.info.droppedFrames;
+			mCurrentFrame = mStartKeyframe+1 + mStream.decodedFrames-mDecodedFramesOffset + mStream.info.droppedFrames-mDroppedFramesOffset;
+			
+			return mStream.time*mMetaData.videoframerate; 
+		}
 		
 		private function netStream_onMetaData(item:Object):void {
+			mMetaData = item;
+			mDecodedFrames = 0;
+			mDecodedFramesOffset = 0;
+			mDroppedFramesOffset = 0;
+			mStartKeyframe = 0;
 			disposeVideo();
 			setupVideo(item.width, item.height);
 			resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
 			onVideoChange();
 		}
+		
 		private function netStream_onXMPMetaData(item:Object):void {
-			disposeVideo();
-			setupVideo(item.width, item.height);
-			resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
-			onVideoChange();
+			netStream_onMetaData(item);
 		}
 		
 		/** Adds or removes the EventListeners for drawing the texture. */
@@ -696,9 +732,6 @@
 			if (!contextStatus)
 				return;
 			
-			if (!mStreamPlaying)
-				return;
-			
 			if (!mTexture || !mBitmapData) return;
 				
 			mTime = getTimer();
@@ -720,11 +753,19 @@
 		{
 			if (!contextStatus)
 				return;
-			mNewFrameAvailable = mStream.decodedFrames != mDecodedFrames;
+			
+			if (mStream.decodedFrames == 0 && mDecodedFrames != 0) {
+				// if the stream is not playing and fps drop to 0, decodedFrames gets reset to 0 ... so we have to note that ourselves.
+				mDecodedFramesOffset -= mDecodedFrames;
+			}
+			
 			mDecodedFrames = mStream.decodedFrames;
-			if (mStreamPlaying && mNewFrameAvailable) {
+			mCurrentFrame = mStartKeyframe+1 + mStream.decodedFrames - mDecodedFramesOffset + mStream.info.droppedFrames - mDroppedFramesOffset;
+			mNewFrameAvailable = mLastFrame != mCurrentFrame;
+			
+			if (mNewFrameAvailable) {
 				dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.VIDEO_FRAME);
-				if (mRecording){
+				if (mRecording) {
 					draw();
 					upload();
 				}
@@ -760,6 +801,14 @@
 				return false;
 			}
 			return true;
+		}
+		
+		/**
+		 * The current frame of the Video, starting with 1
+		 */
+		
+		public function get currentFrame():int {
+			return mCurrentFrame;
 		}
 		
 		/**
@@ -839,6 +888,20 @@
 		}
 		
 		/**
+		 * Returns the length of the Video according to it's metaData
+		 */
+		
+		public function get length():Number {
+			return mMetaData.duration;
+		}
+		
+		/** Returns the metaData object of the NetStream
+		 */
+		public function get metaData():Object {
+			return mMetaData;
+		}
+		
+		/**
 		 * Returns whether a new video frame is available but hasn't been drawn, yet.
 		 */
 		public function get newFrameAvailable():Boolean
@@ -906,6 +969,20 @@
 				mVertexData.setPremultipliedAlpha(mTexture.premultipliedAlpha);
 				onVertexDataChanged();
 			}
+		}
+		
+		/**
+		 * Current time of the playhead in the Video
+		 */
+		public function get time():Number {
+			return mStream.time;
+		}
+		
+		/**
+		 * Estimated number of total frames in the video, according to it's metaData.
+		 */
+		public function get totalFrames():int {
+			return mMetaData.duration*mMetaData.videoframerate -1;
 		}
 		
 		/**
