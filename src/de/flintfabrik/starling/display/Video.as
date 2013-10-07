@@ -500,7 +500,7 @@
 					break;
 				case "NetStream.Seek.Notify":
 					//The seek operation is complete. Sent when NetStream.seek() is called on a stream in AS3 NetStream Data Generation Mode. The info object is extended to include info.seekPoint which is the same value passed to NetStream.seek().
-					mAutoResumeAfterSeekComplete = mStreamPlaying || currentFrame >= totalFrames;
+					mAutoResumeAfterSeekComplete = mStreamPlaying || currentFrame >= totalFrames-1;
 					if(mAutoResumeAfterSeekComplete) mStream.pause();
 					break;
 				case "NetStream.Step.Notify":
@@ -982,7 +982,7 @@
 		 * Estimated number of total frames in the video, according to it's metaData.
 		 */
 		public function get totalFrames():int {
-			return mMetaData.duration*mMetaData.videoframerate -1;
+			return mMetaData.duration*mMetaData.videoframerate;
 		}
 		
 		/**
