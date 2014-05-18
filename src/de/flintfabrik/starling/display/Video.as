@@ -129,11 +129,6 @@ package de.flintfabrik.starling.display
 		private var mVertexDataCache:VertexData;
 		private var mVertexDataCacheInvalid:Boolean;
 		private var mVideo:flash.media.Video = new flash.media.Video(WIDTH, HEIGHT);
-		/**
-		 * If set to true and your upload settings support an alpha channel the bitmapdata will be
-		 * cleared before drawing.
-		 */
-		public var videoAlpha:Boolean = false;
 		
 		/** Creates a Video
 		 * @param netStream
@@ -144,16 +139,11 @@ package de.flintfabrik.starling.display
 		 * If true the video will be drawn to texture as soon as the Video instance is added to stage.
 		 * Recording stops automatically if the Video instance is removed from stage. To prevent this
 		 * behaviour use start(true) to force recording, even if the Video is not part of the display list.
-		 * @param bmpdAlpha
+		 * @param alpha
 		 * Whether the bitmapData for uploading has an alpha channel.
-		 * <strong>NOTE:</strong> This will not clear the bitmapData. This option has effect on draw/upload speed.
-		 * To clear the bitmapData as well for support of videos with Alpha channel, also set videoAlpha to true.
-		 * @param videoAlpha
-		 * Whether the Video source has an alpha channel.
-		 * In combination with bmpdAlpha this will enable support for videos with alpha channel.
 		 */
 		
-		public function Video(stream:NetStream, rect:Rectangle = null, autoStart:Boolean = true, bmpdAlpha:Boolean = false, videoAlpha:Boolean = false)
+		public function Video(stream:NetStream, rect:Rectangle = null, autoStart:Boolean = true, alpha:Boolean = false)
 		{
 			var pma:Boolean = true;
 			
@@ -170,8 +160,7 @@ package de.flintfabrik.starling.display
 			super(mFrame.width, mFrame.height, 0xffffff, pma);
 			
 			mRecording = autoStart;
-			mAlpha = bmpdAlpha;
-			this.videoAlpha = videoAlpha;
+			mAlpha = alpha;
 			mBitmapData = new BitmapData(mFrame.width, mFrame.height, mAlpha, 0);
 			readjustSize(mFrame);
 			mVertexDataCache = new VertexData(4, pma);
@@ -318,7 +307,7 @@ package de.flintfabrik.starling.display
 			
 			mTime = getTimer();
 			
-			if (videoAlpha && mAlpha)
+			if (mAlpha)
 				mBitmapData.fillRect(mBitmapData.rect, 0);
 			mBitmapData.draw(mVideo, mFrameMatrix);
 			mStatsDrawTime.unshift(getTimer() - mTime);
