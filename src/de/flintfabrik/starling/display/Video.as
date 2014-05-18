@@ -20,7 +20,7 @@
  *	THE SOFTWARE.
  */
 
- package de.flintfabrik.starling.display
+package de.flintfabrik.starling.display
 {
 	import de.flintfabrik.starling.events.VideoEvent;
 	import flash.desktop.*;
@@ -47,19 +47,18 @@
 	import starling.utils.VertexData;
 	
 	/** Dispatched when a new frame of the video is available. */
-    [Event(name="videoFrame", type="de.flintfabrik.starling.events.VideoEvent")]
-    /** Dispatched after a new frame has been drawn to BitmapData. */
-    [Event(name="drawComplete", type="de.flintfabrik.starling.events.VideoEvent")]
-    /** Dispatched after a new frame has been uploaded from the BitmapData to texture. */
-    [Event(name="uploadComplete", type="de.flintfabrik.starling.events.VideoEvent")]
-    
+	[Event(name="videoFrame",type="de.flintfabrik.starling.events.VideoEvent")]
+	/** Dispatched after a new frame has been drawn to BitmapData. */
+	[Event(name="drawComplete",type="de.flintfabrik.starling.events.VideoEvent")]
+	/** Dispatched after a new frame has been uploaded from the BitmapData to texture. */
+	[Event(name="uploadComplete",type="de.flintfabrik.starling.events.VideoEvent")]
 	
 	/** A Video is a Quad with a texture mapped onto it.
 	 *
 	 *  <p>The Video class is more or less a Starling equivalent of Flash's Video class with attached <em>NetStream</em>.
 	 *  The texture is written automatically if not specified otherwise. Never the less you can use other DisplayObjects
 	 *  for rendering as well and or handle the drawing and uploading yourself if you want to.</p>
-	 * 
+	 *
 	 *  <p><strong>Note:</strong><em>There are no controls for starting/stopping the video source in this class. This has to be done by controlling the
 	 *  netStream. If you start/stop the netStream, the video will recieve the Events of the netStream and handle the rest.</em></p>
 	 *
@@ -112,7 +111,7 @@
 		private var mFrame:Rectangle = new Rectangle();
 		private var mFrameMatrix:Matrix = new Matrix();
 		private var mLastFrame:int = 0;
-		private var mMetaData:Object = { };
+		private var mMetaData:Object = {};
 		private var mNativeApplicationClass:Class;
 		private var mNewFrameAvailable:Boolean = false;
 		private var mRecording:Boolean = true;
@@ -130,6 +129,11 @@
 		private var mVertexDataCache:VertexData;
 		private var mVertexDataCacheInvalid:Boolean;
 		private var mVideo:flash.media.Video = new flash.media.Video(WIDTH, HEIGHT);
+		/**
+		 * If set to true and your upload settings support an alpha channel the bitmapdata will be
+		 * cleared before drawing.
+		 */
+		public var videoAlpha:Boolean = false;
 		
 		/** Creates a Video
 		 * @param netStream
@@ -140,16 +144,22 @@
 		 * If true the video will be drawn to texture as soon as the Video instance is added to stage.
 		 * Recording stops automatically if the Video instance is removed from stage. To prevent this
 		 * behaviour use start(true) to force recording, even if the Video is not part of the display list.
-		 * @param alpha
-		 * Whether the bitmapData for uploading has an alpha channel
+		 * @param bmpdAlpha
+		 * Whether the bitmapData for uploading has an alpha channel.
+		 * <strong>NOTE:</strong> This will not clear the bitmapData. This option has effect on draw/upload speed.
+		 * To clear the bitmapData as well for support of videos with Alpha channel, also set videoAlpha to true.
+		 * @param videoAlpha
+		 * Whether the Video source has an alpha channel.
+		 * In combination with bmpdAlpha this will enable support for videos with alpha channel.
 		 */
-		 
-		public function Video(stream:NetStream, rect:Rectangle = null, autoStart:Boolean = true, alpha:Boolean = false) {
+		
+		public function Video(stream:NetStream, rect:Rectangle = null, autoStart:Boolean = true, bmpdAlpha:Boolean = false, videoAlpha:Boolean = false)
+		{
 			var pma:Boolean = true;
 			
 			mStream = stream;
 			mStream.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler);
-            mStream.addEventListener(AsyncErrorEvent.ASYNC_ERROR, asyncErrorHandler);
+			mStream.addEventListener(AsyncErrorEvent.ASYNC_ERROR, asyncErrorHandler);
 			mStream.client = {};
 			mStream.client.onMetaData = netStream_onMetaData;
 			mStream.client.onXMPData = netStream_onXMPMetaData;
@@ -160,7 +170,8 @@
 			super(mFrame.width, mFrame.height, 0xffffff, pma);
 			
 			mRecording = autoStart;
-			mAlpha = alpha;
+			mAlpha = bmpdAlpha;
+			this.videoAlpha = videoAlpha;
 			mBitmapData = new BitmapData(mFrame.width, mFrame.height, mAlpha, 0);
 			readjustSize(mFrame);
 			mVertexDataCache = new VertexData(4, pma);
@@ -169,14 +180,19 @@
 			addEventListener(starling.events.Event.ADDED_TO_STAGE, addedToStageHandler);
 			
 			// Android / iOS / Blackberry?
-			if(Capabilities.playerType.match(/desktop/i)){
-				try{
+			if (Capabilities.playerType.match(/desktop/i))
+			{
+				try
+				{
 					mNativeApplicationClass = Class(getDefinitionByName("flash.desktop.NativeApplication"));
-					if((Capabilities.os+Capabilities.manufacturer).match(/Android|iOS|iPhone|iPad|iPod|Blackberry/i) && mNativeApplicationClass && mNativeApplicationClass.nativeApplication) {
+					if ((Capabilities.os + Capabilities.manufacturer).match(/Android|iOS|iPhone|iPad|iPod|Blackberry/i) && mNativeApplicationClass && mNativeApplicationClass.nativeApplication)
+					{
 						mNativeApplicationClass.nativeApplication.addEventListener(flash.events.Event.ACTIVATE, activateHandler);
 						mNativeApplicationClass.nativeApplication.addEventListener(flash.events.Event.DEACTIVATE, deactivateHandler);
 					}
-				}catch (err:*) {
+				}
+				catch (err:*)
+				{
 					trace(err.toString())
 				}
 			}
@@ -188,7 +204,7 @@
 		 * Resume on application focus for mobile devices.
 		 * @param	e
 		 */
-		private function activateHandler(e:flash.events.Event):void 
+		private function activateHandler(e:flash.events.Event):void
 		{
 			start(mAutoStartAfterHandledLostContext);
 		}
@@ -203,10 +219,11 @@
 			onVideoChange();
 			addEventListener(starling.events.Event.REMOVED_FROM_STAGE, removedFromStageHandler);
 		}
-        
-        private function asyncErrorHandler(event:AsyncErrorEvent):void {
-            trace("AsyncErrorEvent", event);
-        }
+		
+		private function asyncErrorHandler(event:AsyncErrorEvent):void
+		{
+			trace("AsyncErrorEvent", event);
+		}
 		
 		/**
 		 * Restart after device loss.
@@ -240,7 +257,7 @@
 		 * Pause on lost application focus for mobile devices.
 		 * @param	e
 		 */
-		private function deactivateHandler(e:flash.events.Event):void 
+		private function deactivateHandler(e:flash.events.Event):void
 		{
 			mAutoStartAfterHandledLostContext = isActive;
 			pause();
@@ -258,7 +275,8 @@
 			removeEventListener(starling.events.Event.ADDED_TO_STAGE, addedToStageHandler);
 			removeEventListener(starling.events.Event.REMOVED_FROM_STAGE, removedFromStageHandler);
 			Starling.current.removeEventListener(starling.events.Event.CONTEXT3D_CREATE, contextCreateHandler);
-			if(mNativeApplicationClass){
+			if (mNativeApplicationClass)
+			{
 				mNativeApplicationClass.nativeApplication.removeEventListener(flash.events.Event.ACTIVATE, activateHandler);
 				mNativeApplicationClass.nativeApplication.removeEventListener(flash.events.Event.DEACTIVATE, deactivateHandler);
 			}
@@ -274,9 +292,10 @@
 			super.dispose();
 		}
 		
-		private function disposeVideo():void 
+		private function disposeVideo():void
 		{
-			if (mVideo) {
+			if (mVideo)
+			{
 				mVideo.removeEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler);
 				mVideo.attachNetStream(null);
 			}
@@ -293,11 +312,14 @@
 			
 			if (!mNewFrameAvailable)
 				return;
-				
-			if (!mVideo) return;
+			
+			if (!mVideo)
+				return;
 			
 			mTime = getTimer();
 			
+			if (videoAlpha && mAlpha)
+				mBitmapData.fillRect(mBitmapData.rect, 0);
 			mBitmapData.draw(mVideo, mFrameMatrix);
 			mStatsDrawTime.unshift(getTimer() - mTime);
 			
@@ -310,249 +332,257 @@
 			dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.DRAW_COMPLETE);
 		}
 		
-		private function netStatusHandler(event:NetStatusEvent):void {
+		private function netStatusHandler(event:NetStatusEvent):void
+		{
 			
-			switch (event.info.code) {
+			switch (event.info.code)
+			{
 				
-				case "NetConnection.Call.BadVersion":
+				case "NetConnection.Call.BadVersion": 
 					//Packet encoded in an unidentified format.
 					break;
-				case "NetConnection.Call.Failed":
+				case "NetConnection.Call.Failed": 
 					//The NetConnection.call() method was not able to invoke the server-side method or command.
 					break;
-				case "NetConnection.Call.Prohibited":
+				case "NetConnection.Call.Prohibited": 
 					//An Action Message Format (AMF) operation is prevented for security reasons. Either the AMF URL is not in the same domain as the file containing the code calling the NetConnection.call() method, or the AMF server does not have a policy file that trusts the domain of the the file containing the code calling the NetConnection.call() method.
 					break;
-				case "NetConnection.Connect.AppShutdown":
+				case "NetConnection.Connect.AppShutdown": 
 					//The server-side application is shutting down.
 					break;
-				case "NetConnection.Connect.Closed":
+				case "NetConnection.Connect.Closed": 
 					//The connection was closed successfully.
 					mStreamPlaying = false;
 					break;
-				case "NetConnection.Connect.Failed":
+				case "NetConnection.Connect.Failed": 
 					//The connection attempt failed.
 					break;
-				case "NetConnection.Connect.IdleTimeout":
+				case "NetConnection.Connect.IdleTimeout": 
 					//Flash Media Server disconnected the client because the client was idle longer than the configured value for <MaxIdleTime>. On Flash Media Server, <AutoCloseIdleClients> is disabled by default. When enabled, the default timeout value is 3600 seconds (1 hour). For more information, see Close idle connections.
 					break;
-				case "NetConnection.Connect.InvalidApp":
+				case "NetConnection.Connect.InvalidApp": 
 					//The application name specified in the call to NetConnection.connect() is invalid.
 					break;
-				case "NetConnection.Connect.NetworkChange":
+				case "NetConnection.Connect.NetworkChange": 
 					//Flash Player has detected a network change, for example, a dropped wireless connection, a successful wireless connection,or a network cable loss. Use this event to check for a network interface change. Don't use this event to implement your NetConnection reconnect logic. Use "NetConnection.Connect.Closed" to implement your NetConnection reconnect logic.
 					break;
-				case "NetConnection.Connect.Rejected":
+				case "NetConnection.Connect.Rejected": 
 					//The connection attempt did not have permission to access the application.
 					break;
-				case "NetConnection.Connect.Success":
+				case "NetConnection.Connect.Success": 
 					//The connection attempt succeeded.
 					break;
-				case "NetGroup.Connect.Failed":
+				case "NetGroup.Connect.Failed": 
 					//The NetGroup connection attempt failed. The info.group property indicates which NetGroup failed.
 					break;
-				case "NetGroup.Connect.Rejected":
+				case "NetGroup.Connect.Rejected": 
 					//The NetGroup is not authorized to function. The info.group property indicates which NetGroup was denied.
 					break;
-				case "NetGroup.Connect.Success":
+				case "NetGroup.Connect.Success": 
 					//The NetGroup is successfully constructed and authorized to function. The info.group property indicates which NetGroup has succeeded.
 					break;
-				case "NetGroup.LocalCoverage.Notify":
+				case "NetGroup.LocalCoverage.Notify": 
 					//Sent when a portion of the group address space for which this node is responsible changes.
 					break;
-				case "NetGroup.MulticastStream.PublishNotify":
+				case "NetGroup.MulticastStream.PublishNotify": 
 					//Sent when a new named stream is detected in NetGroup's Group. The info.name:String property is the name of the detected stream.
 					break;
-				case "NetGroup.MulticastStream.UnpublishNotify":
+				case "NetGroup.MulticastStream.UnpublishNotify": 
 					//Sent when a named stream is no longer available in the Group. The info.name:String property is name of the stream which has disappeared.
 					break;
-				case "NetGroup.Neighbor.Connect":
+				case "NetGroup.Neighbor.Connect": 
 					//Sent when a neighbor connects to this node. The info.neighbor:String property is the group address of the neighbor. The info.peerID:String property is the peer ID of the neighbor.
 					break;
-				case "NetGroup.Neighbor.Disconnect":
+				case "NetGroup.Neighbor.Disconnect": 
 					//Sent when a neighbor disconnects from this node. The info.neighbor:String property is the group address of the neighbor. The info.peerID:String property is the peer ID of the neighbor.
 					break;
-				case "NetGroup.Posting.Notify":
+				case "NetGroup.Posting.Notify": 
 					//Sent when a new Group Posting is received. The info.message:Object property is the message. The info.messageID:String property is this message's messageID.
 					break;
-				case "NetGroup.Replication.Fetch.Failed":
+				case "NetGroup.Replication.Fetch.Failed": 
 					//Sent when a fetch request for an object (previously announced with NetGroup.Replication.Fetch.SendNotify) fails or is denied. A new attempt for the object will be made if it is still wanted. The info.index:Number property is the index of the object that had been requested.
 					break;
-				case "NetGroup.Replication.Fetch.Result":
+				case "NetGroup.Replication.Fetch.Result": 
 					//Sent when a fetch request was satisfied by a neighbor. The info.index:Number property is the object index of this result. The info.object:Object property is the value of this object. This index will automatically be removed from the Want set. If the object is invalid, this index can be re-added to the Want set with NetGroup.addWantObjects().
 					break;
-				case "NetGroup.Replication.Fetch.SendNotify":
+				case "NetGroup.Replication.Fetch.SendNotify": 
 					//Sent when the Object Replication system is about to send a request for an object to a neighbor.The info.index:Number property is the index of the object that is being requested.
 					break;
-				case "NetGroup.Replication.Request":
+				case "NetGroup.Replication.Request": 
 					//Sent when a neighbor has requested an object that this node has announced with NetGroup.addHaveObjects(). This request must eventually be answered with either NetGroup.writeRequestedObject() or NetGroup.denyRequestedObject(). Note that the answer may be asynchronous. The info.index:Number property is the index of the object that has been requested. The info.requestID:int property is the ID of this request, to be used by NetGroup.writeRequestedObject() or NetGroup.denyRequestedObject().
 					break;
-				case "NetGroup.SendTo.Notify":
+				case "NetGroup.SendTo.Notify": 
 					//Sent when a message directed to this node is received. The info.message:Object property is the message. The info.from:String property is the groupAddress from which the message was received. The info.fromLocal:Boolean property is TRUE if the message was sent by this node (meaning the local node is the nearest to the destination group address), and FALSE if the message was received from a different node. To implement recursive routing, the message must be resent with NetGroup.sendToNearest() if info.fromLocal is FALSE.
 					break;
-				case "NetStream.Buffer.Empty":
+				case "NetStream.Buffer.Empty": 
 					//Flash Player is not receiving data quickly enough to fill the buffer. Data flow is interrupted until the buffer refills, at which time a NetStream.Buffer.Full message is sent and the stream begins playing again.
 					break;
-				case "NetStream.Buffer.Flush":
+				case "NetStream.Buffer.Flush": 
 					//Data has finished streaming, and the remaining buffer is emptied. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Buffer.Full":
+				case "NetStream.Buffer.Full": 
 					//The buffer is full and the stream begins playing.
 					break;
-				case "NetStream.Connect.Closed":
+				case "NetStream.Connect.Closed": 
 					//The P2P connection was closed successfully. The info.stream property indicates which stream has closed. Note: Not supported in AIR 3.0 for iOS.
 					mStreamPlaying = false;
 					break;
-				case "NetStream.Connect.Failed":
+				case "NetStream.Connect.Failed": 
 					//The P2P connection attempt failed. The info.stream property indicates which stream has failed. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Connect.Rejected":
+				case "NetStream.Connect.Rejected": 
 					//The P2P connection attempt did not have permission to access the other peer. The info.stream property indicates which stream was rejected. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Connect.Success":
+				case "NetStream.Connect.Success": 
 					//The P2P connection attempt succeeded. The info.stream property indicates which stream has succeeded. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.DRM.UpdateNeeded":
+				case "NetStream.DRM.UpdateNeeded": 
 					//A NetStream object is attempting to play protected content, but the required Flash Access module is either not present, not permitted by the effective content policy, or not compatible with the current player. To update the module or player, use the update() method of flash.system.SystemUpdater. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Failed":
+				case "NetStream.Failed": 
 					//(Flash Media Server) An error has occurred for a reason other than those listed in other event codes.
 					break;
-				case "NetStream.MulticastStream.Reset":
+				case "NetStream.MulticastStream.Reset": 
 					//A multicast subscription has changed focus to a different stream published with the same name in the same group. Local overrides of multicast stream parameters are lost. Reapply the local overrides or the new stream's default parameters will be used.
 					mStreamPlaying = true;
 					break;
-				case "NetStream.Pause.Notify":
+				case "NetStream.Pause.Notify": 
 					//The stream is paused.
 					mStreamPlaying = false;
 					break;
-				case "NetStream.Play.Failed":
+				case "NetStream.Play.Failed": 
 					//An error has occurred in playback for a reason other than those listed elsewhere in this table, such as the subscriber not having read access. Note: Not supported in AIR 3.0 for iOS.
 					mStreamPlaying = false;
 					break;
-				case "NetStream.Play.FileStructureInvalid":
+				case "NetStream.Play.FileStructureInvalid": 
 					//(AIR and Flash Player 9.0.115.0) The application detects an invalid file structure and will not try to play this type of file. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Play.InsufficientBW":
+				case "NetStream.Play.InsufficientBW": 
 					//(Flash Media Server) The client does not have sufficient bandwidth to play the data at normal speed. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Play.NoSupportedTrackFound":
+				case "NetStream.Play.NoSupportedTrackFound": 
 					//(AIR and Flash Player 9.0.115.0) The application does not detect any supported tracks (video, audio or data) and will not try to play the file. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Play.PublishNotify":
+				case "NetStream.Play.PublishNotify": 
 					//The initial publish to a stream is sent to all subscribers.
 					break;
-				case "NetStream.Play.Reset":
+				case "NetStream.Play.Reset": 
 					//Caused by a play list reset. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Play.Start":
+				case "NetStream.Play.Start": 
 					//Playback has started.
 					mStreamPlaying = true;
 					break;
-				case "NetStream.Play.Stop":
+				case "NetStream.Play.Stop": 
 					mStreamPlaying = false;
 					//Playback has stopped.
 					break;
-				case "NetStream.Play.StreamNotFound":
+				case "NetStream.Play.StreamNotFound": 
 					//The file passed to the NetStream.play() method can't be found.
 					mStreamPlaying = false;
 					break;
-				case "NetStream.Play.Transition":
+				case "NetStream.Play.Transition": 
 					//(Flash Media Server 3.5) The server received the command to transition to another stream as a result of bitrate stream switching. This code indicates a success status event for the NetStream.play2() call to initiate a stream switch. If the switch does not succeed, the server sends a NetStream.Play.Failed event instead. When the stream switch occurs, an onPlayStatus event with a code of "NetStream.Play.TransitionComplete" is dispatched. For Flash Player 10 and later. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Play.UnpublishNotify":
+				case "NetStream.Play.UnpublishNotify": 
 					//An unpublish from a stream is sent to all subscribers.
 					break;
-				case "NetStream.Publish.BadName":
+				case "NetStream.Publish.BadName": 
 					//Attempt to publish a stream which is already being published by someone else.
 					break;
-				case "NetStream.Publish.Idle":
+				case "NetStream.Publish.Idle": 
 					//The publisher of the stream is idle and not transmitting data.
 					break;
-				case "NetStream.Publish.Start":
+				case "NetStream.Publish.Start": 
 					//Publish was successful.
 					break;
-				case "NetStream.Record.AlreadyExists":
+				case "NetStream.Record.AlreadyExists": 
 					//The stream being recorded maps to a file that is already being recorded to by another stream. This can happen due to misconfigured virtual directories.
 					break;
-				case "NetStream.Record.Failed":
+				case "NetStream.Record.Failed": 
 					//An attempt to record a stream failed.
 					break;
-				case "NetStream.Record.NoAccess":
+				case "NetStream.Record.NoAccess": 
 					//Attempt to record a stream that is still playing or the client has no access right.
 					break;
-				case "NetStream.Record.Start":
+				case "NetStream.Record.Start": 
 					//Recording has started.
 					break;
-				case "NetStream.Record.Stop":
+				case "NetStream.Record.Stop": 
 					//Recording stopped.
 					break;
-				case "NetStream.Seek.Complete":
+				case "NetStream.Seek.Complete": 
 					//The seek fails, which happens if the stream is not seekable.
 					mStartKeyframe = getNearestKeyframe();
-					if (mAutoResumeAfterSeekComplete) mStream.resume();
+					if (mAutoResumeAfterSeekComplete)
+						mStream.resume();
 					break;
-				case "NetStream.Seek.Failed":
+				case "NetStream.Seek.Failed": 
 					//The seek fails, which happens if the stream is not seekable.
 					break;
-				case "NetStream.Seek.InvalidTime":
+				case "NetStream.Seek.InvalidTime": 
 					//For video downloaded progressively, the user has tried to seek or play past the end of the video data that has downloaded thus far, or past the end of the video once the entire file has downloaded. The info.details property of the event object contains a time code that indicates the last valid position to which the user can seek.
 					break;
-				case "NetStream.Seek.Notify":
+				case "NetStream.Seek.Notify": 
 					//The seek operation is complete. Sent when NetStream.seek() is called on a stream in AS3 NetStream Data Generation Mode. The info object is extended to include info.seekPoint which is the same value passed to NetStream.seek().
-					mAutoResumeAfterSeekComplete = mStreamPlaying || currentFrame >= totalFrames-1;
-					if(mAutoResumeAfterSeekComplete) mStream.pause();
+					mAutoResumeAfterSeekComplete = mStreamPlaying || currentFrame >= totalFrames - 1;
+					if (mAutoResumeAfterSeekComplete)
+						mStream.pause();
 					break;
-				case "NetStream.Step.Notify":
+				case "NetStream.Step.Notify": 
 					//The step operation is complete. Note: Not supported in AIR 3.0 for iOS.
 					break;
-				case "NetStream.Unpause.Notify":
+				case "NetStream.Unpause.Notify": 
 					//The stream is resumed.
 					mStreamPlaying = true;
 					break;
-				case "NetStream.Unpublish.Success":
+				case "NetStream.Unpublish.Success": 
 					//The unpublish operation was successfuul.
 					break;
-				case "SharedObject.BadPersistence":
+				case "SharedObject.BadPersistence": 
 					//A request was made for a shared object with persistence flags, but the request cannot be granted because the object has already been created with different flags.
 					break;
-				case "SharedObject.Flush.Failed":
+				case "SharedObject.Flush.Failed": 
 					//The "pending" status is resolved, but the SharedObject.flush() failed.
 					break;
-				case "SharedObject.Flush.Success":
+				case "SharedObject.Flush.Success": 
 					//The "pending" status is resolved and the SharedObject.flush() call succeeded.
 					break;
-				case "SharedObject.UriMismatch":
+				case "SharedObject.UriMismatch": 
 					//An attempt was made to connect to a NetConnection object that has a different URI (URL) than the shared object.
 					break;
-				case "NetStream.Video.DimensionChange":
+				case "NetStream.Video.DimensionChange": 
 					//The video dimensions are available or have changed. Use the Video or StageVideo videoWidth/videoHeight property to query the new video dimensions. New in Flash Player 11.4/AIR 3.4.
 					resizeVideo(mVideo.videoWidth, mVideo.videoHeight);
 					break;
-				default:
+				default: 
 					break;
 			}
 		}
 		
-		private function getNearestKeyframe():int {
+		private function getNearestKeyframe():int
+		{
 			var idx:int = 0;
 			var keytimes:Array = mMetaData.seekpoints;
 			var second:Number = mStream.time;
 			
-			if (!keytimes || !keytimes.length) {
+			if (!keytimes || !keytimes.length)
+			{
 				return -1;
 			}
-			while(idx < keytimes.length && keytimes[idx].time < second){
+			while (idx < keytimes.length && keytimes[idx].time < second)
+			{
 				++idx;
 			}
 			mDecodedFramesOffset = mStream.decodedFrames;
 			mDroppedFramesOffset = mStream.info.droppedFrames;
-			mCurrentFrame = mStartKeyframe+1 + mStream.decodedFrames-mDecodedFramesOffset + mStream.info.droppedFrames-mDroppedFramesOffset;
+			mCurrentFrame = mStartKeyframe + 1 + mStream.decodedFrames - mDecodedFramesOffset + mStream.info.droppedFrames - mDroppedFramesOffset;
 			
-			return mStream.time*mMetaData.videoframerate; 
+			return mStream.time * mMetaData.videoframerate;
 		}
 		
-		private function netStream_onMetaData(item:Object):void {
+		private function netStream_onMetaData(item:Object):void
+		{
 			mMetaData = item;
 			mDecodedFrames = 0;
 			mDecodedFramesOffset = 0;
@@ -564,7 +594,8 @@
 			onVideoChange();
 		}
 		
-		private function netStream_onXMPMetaData(item:Object):void {
+		private function netStream_onXMPMetaData(item:Object):void
+		{
 			netStream_onMetaData(item);
 		}
 		
@@ -573,10 +604,13 @@
 		{
 			if (!mTexture)
 				readjustSize();
-				
-			if (mActive && (mAddedToStage || mForceRecording)) {
+			
+			if (mActive && (mAddedToStage || mForceRecording))
+			{
 				mVideo.addEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler, false, 0, true);
-			} else {
+			}
+			else
+			{
 				mVideo.removeEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler);
 			}
 		}
@@ -602,7 +636,8 @@
 		 */
 		private function readjustSize(rectangle:Rectangle = null):void
 		{
-			if (!contextStatus) return;
+			if (!contextStatus)
+				return;
 			
 			mStatsDrawnFrames = 0;
 			mStatsUploadedFrames = 0;
@@ -612,12 +647,14 @@
 			if (rectangle == null)
 				rectangle = new Rectangle(0, 0, mVideo.width, mVideo.height);
 			var newFrame:Rectangle = new Rectangle(rectangle.x, rectangle.y, Math.min(mVideo.width - rectangle.x, rectangle.width), Math.min(mVideo.height - rectangle.y, rectangle.height));
-			if (!newFrame.equals(mFrame) || !mBitmapData) {
+			if (!newFrame.equals(mFrame) || !mBitmapData)
+			{
 				if (mBitmapData)
 					mBitmapData.dispose();
 				mBitmapData = new BitmapData(newFrame.width, newFrame.height, mAlpha, 0);
 				mBitmapData.lock();
-				if (mTexture) {
+				if (mTexture)
+				{
 					mTexture.dispose();
 					mTexture = null;
 				}
@@ -625,7 +662,8 @@
 			mFrame = newFrame;
 			mFrameMatrix = new Matrix(1, 0, 0, 1, -mFrame.x, -mFrame.y);
 			
-			if (mVertexData){
+			if (mVertexData)
+			{
 				mVertexData.setPosition(0, 0.0, 0.0);
 				mVertexData.setPosition(1, mFrame.width, 0.0);
 				mVertexData.setPosition(2, 0.0, mFrame.height);
@@ -651,20 +689,24 @@
 		/** @inheritDoc */
 		public override function render(support:RenderSupport, parentAlpha:Number):void
 		{
-			if(mTexture)support.batchQuad(this, parentAlpha, mTexture, mSmoothing);
+			if (mTexture)
+				support.batchQuad(this, parentAlpha, mTexture, mSmoothing);
 		}
 		
 		/**
 		 * Creates a new flash video object with given width/height.
 		 * Call this method to synchronize video and texture size after assigning another video source,
 		 * if the stream doesn't dispatch the meta data event or NetStream.Video.DimensionChange.
-		 * 
+		 *
 		 * @param	width
 		 * @param	height
 		 */
-		public function resizeVideo(width:int = WIDTH, height:int = HEIGHT):void {
-			if (width <= 0 || height <= 0) return;
-			if(width != mVideo.width || height != mVideo.height || mFrame.width != mVideo.width || mFrame.height != mVideo.height){
+		public function resizeVideo(width:int = WIDTH, height:int = HEIGHT):void
+		{
+			if (width <= 0 || height <= 0)
+				return;
+			if (width != mVideo.width || height != mVideo.height || mFrame.width != mVideo.width || mFrame.height != mVideo.height)
+			{
 				disposeVideo();
 				setupVideo(width, height)
 				var rect:Rectangle = new Rectangle(0, 0, mVideo.width, mVideo.height);
@@ -673,11 +715,13 @@
 			}
 		}
 		
-		private function securityErrorHandler(event:SecurityErrorEvent):void {
-            trace("securityErrorHandler: " + event);
-        }
+		private function securityErrorHandler(event:SecurityErrorEvent):void
+		{
+			trace("securityErrorHandler: " + event);
+		}
 		
-		private function setupVideo(width:int=WIDTH, height:int=HEIGHT):void {
+		private function setupVideo(width:int = WIDTH, height:int = HEIGHT):void
+		{
 			mVideo = new flash.media.Video(width, height);
 			mVideo.attachNetStream(mStream);
 		}
@@ -732,8 +776,9 @@
 			if (!contextStatus)
 				return;
 			
-			if (!mTexture || !mBitmapData) return;
-				
+			if (!mTexture || !mBitmapData)
+				return;
+			
 			mTime = getTimer();
 			
 			mTextureClass(mTexture.base).uploadFromBitmapData(mBitmapData);
@@ -754,18 +799,21 @@
 			if (!contextStatus)
 				return;
 			
-			if (mStream.decodedFrames == 0 && mDecodedFrames != 0) {
+			if (mStream.decodedFrames == 0 && mDecodedFrames != 0)
+			{
 				// if the stream is not playing and fps drop to 0, decodedFrames gets reset to 0 ... so we have to note that ourselves.
 				mDecodedFramesOffset -= mDecodedFrames;
 			}
 			
 			mDecodedFrames = mStream.decodedFrames;
-			mCurrentFrame = mStartKeyframe+1 + mStream.decodedFrames - mDecodedFramesOffset + mStream.info.droppedFrames - mDroppedFramesOffset;
+			mCurrentFrame = mStartKeyframe + 1 + mStream.decodedFrames - mDecodedFramesOffset + mStream.info.droppedFrames - mDroppedFramesOffset;
 			mNewFrameAvailable = mLastFrame != mCurrentFrame;
 			
-			if (mNewFrameAvailable) {
+			if (mNewFrameAvailable)
+			{
 				dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.VIDEO_FRAME);
-				if (mRecording) {
+				if (mRecording)
+				{
 					draw();
 					upload();
 				}
@@ -807,7 +855,8 @@
 		 * The current frame of the Video, starting with 1
 		 */
 		
-		public function get currentFrame():int {
+		public function get currentFrame():int
+		{
 			return mCurrentFrame;
 		}
 		
@@ -891,13 +940,15 @@
 		 * Returns the length of the Video according to it's metaData
 		 */
 		
-		public function get length():Number {
+		public function get length():Number
+		{
 			return mMetaData.duration;
 		}
 		
 		/** Returns the metaData object of the NetStream
 		 */
-		public function get metaData():Object {
+		public function get metaData():Object
+		{
 			return mMetaData;
 		}
 		
@@ -939,6 +990,7 @@
 		{
 			return mSmoothing;
 		}
+		
 		public function set smoothing(value:String):void
 		{
 			if (TextureSmoothing.isValid(value))
@@ -963,7 +1015,8 @@
 			}
 			else if (value != mTexture)
 			{
-				if (mTexture) mTexture.dispose();
+				if (mTexture)
+					mTexture.dispose();
 				mTexture = value;
 				mTextureClass = Class(getDefinitionByName(getQualifiedClassName(mTexture.base)));
 				mVertexData.setPremultipliedAlpha(mTexture.premultipliedAlpha);
@@ -974,25 +1027,29 @@
 		/**
 		 * Current time of the playhead in the Video
 		 */
-		public function get time():Number {
+		public function get time():Number
+		{
 			return mStream.time;
 		}
 		
 		/**
 		 * Estimated number of total frames in the video, according to it's metaData.
 		 */
-		public function get totalFrames():int {
-			return mMetaData.duration*mMetaData.videoframerate;
+		public function get totalFrames():int
+		{
+			return mMetaData.duration * mMetaData.videoframerate;
 		}
 		
 		/**
 		 * The native flash video object to which the netStream is attached.
 		 */
-		public function get video():flash.media.Video {
+		public function get video():flash.media.Video
+		{
 			return mVideo;
 		}
 		
-		public function set video(video:flash.media.Video):void {
+		public function set video(video:flash.media.Video):void
+		{
 			disposeVideo();
 			
 			mVideo = video;
@@ -1001,7 +1058,7 @@
 			
 			readjustSize();
 		}
-		
+	
 	}
 
 }
