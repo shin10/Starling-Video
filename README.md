@@ -1,3 +1,5 @@
+**Update 2014-07-22: Since Adobe won’t fix [the bug](https://bugbase.adobe.com/index.cfm?event=bug&id=3626740) I reported and unfortunately also [dropped FLV format](http://www.patrickwall.com/2014/06/18/adobe-ditch-flv-support-in-creative-cloud-2014/) last month, I won’t support this extension anymore.**
+
 Starling-Video
 ====================
 
