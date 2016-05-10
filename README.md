@@ -26,3 +26,8 @@ Some info, example code and live demo on my blog:
 http://www.flintfabrik.de/blog/starling-video-extension
 
 live chat (demo with filters for real time postprocessing): www.flintfabrik.de/pgs/starlingVideoChat/
+
+## Release History
+
+ * 2014-05-18   v1.0.0   StarlingFW v1.8.x
+ * 2016-05-10   v1.1.0-alpha   Updated to StarlingFW v2.0.1
