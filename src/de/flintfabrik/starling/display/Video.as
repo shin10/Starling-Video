@@ -1,5 +1,5 @@
 /**
- *	Copyright (c) 2013 Michael Trenkler
+ *	Copyright (c) 2013-2016 Michael Trenkler
  *
  *	Permission is hereby granted, free of charge, to any person obtaining a copy
  *	of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,6 @@ package de.flintfabrik.starling.display
 	import flash.display3D.textures.*;
 	import flash.events.*;
 	import flash.geom.Matrix;
-	import flash.geom.Point;
 	import flash.geom.Rectangle;
 	import flash.media.Video;
 	import flash.net.NetStream;
@@ -36,22 +35,22 @@ package de.flintfabrik.starling.display
 	import flash.utils.getDefinitionByName;
 	import flash.utils.getQualifiedClassName;
 	import flash.utils.getTimer;
-	import starling.core.RenderSupport;
 	import starling.core.Starling;
-	import starling.display.BlendMode;
 	import starling.display.Quad;
 	import starling.events.Event;
-	import starling.textures.ConcreteTexture;
+	import starling.rendering.Painter;
+	import starling.rendering.VertexData;
+	import starling.styles.MeshStyle;
 	import starling.textures.Texture;
 	import starling.textures.TextureSmoothing;
-	import starling.utils.VertexData;
+	import starling.utils.MatrixUtil;
 	
 	/** Dispatched when a new frame of the video is available. */
-	[Event(name="videoFrame",type="de.flintfabrik.starling.events.VideoEvent")]
+	[Event(name = "videoFrame", type = "de.flintfabrik.starling.events.VideoEvent")]
 	/** Dispatched after a new frame has been drawn to BitmapData. */
-	[Event(name="drawComplete",type="de.flintfabrik.starling.events.VideoEvent")]
+	[Event(name = "drawComplete", type = "de.flintfabrik.starling.events.VideoEvent")]
 	/** Dispatched after a new frame has been uploaded from the BitmapData to texture. */
-	[Event(name="uploadComplete",type="de.flintfabrik.starling.events.VideoEvent")]
+	[Event(name = "uploadComplete", type = "de.flintfabrik.starling.events.VideoEvent")]
 	
 	/** A Video is a Quad with a texture mapped onto it.
 	 *
@@ -157,13 +156,13 @@ package de.flintfabrik.starling.display
 			if (rect == null)
 				rect = new Rectangle(0, 0, mVideo.width, mVideo.height);
 			mFrame = new Rectangle(rect.x, rect.y, Math.min(mVideo.width - rect.x, rect.width), Math.min(mVideo.height - rect.y, rect.height));
-			super(mFrame.width, mFrame.height, 0xffffff, pma);
+			super(mFrame.width, mFrame.height, 0xffffff);
 			
 			mRecording = autoStart;
 			mAlpha = alpha;
 			mBitmapData = new BitmapData(mFrame.width, mFrame.height, mAlpha, 0);
-			readjustSize(mFrame);
-			mVertexDataCache = new VertexData(4, pma);
+			_readjustSize(mFrame);
+			mVertexDataCache = new VertexData(MeshStyle.VERTEX_FORMAT, 4);
 			updateVertexData();
 			
 			addEventListener(starling.events.Event.ADDED_TO_STAGE, addedToStageHandler);
@@ -223,23 +222,9 @@ package de.flintfabrik.starling.display
 			if (Starling.current.context && Starling.current.context.driverInfo != "Disposed" && mContextLost)
 			{
 				mContextLost = false;
-				readjustSize(mFrame);
+				_readjustSize(mFrame);
 				start(mAutoStartAfterHandledLostContext);
 			}
-		}
-		
-		/** Copies the raw vertex data to a VertexData instance.
-		 *  The texture coordinates are already in the format required for rendering. */
-		override public function copyVertexDataTo(targetData:VertexData, targetVertexID:int = 0):void
-		{
-			if (mVertexDataCacheInvalid)
-			{
-				mVertexDataCacheInvalid = false;
-				mVertexData.copyTo(mVertexDataCache);
-				mTexture.adjustVertexData(mVertexDataCache, 0, 4);
-			}
-			
-			mVertexDataCache.copyTo(targetData, targetVertexID);
 		}
 		
 		/**
@@ -592,7 +577,7 @@ package de.flintfabrik.starling.display
 		private function onVideoChange():void
 		{
 			if (!mTexture)
-				readjustSize();
+				_readjustSize();
 			
 			if (mActive && (mAddedToStage || mForceRecording))
 			{
@@ -602,12 +587,6 @@ package de.flintfabrik.starling.display
 			{
 				mVideo.removeEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler);
 			}
-		}
-		
-		/** @inheritDoc */
-		protected override function onVertexDataChanged():void
-		{
-			mVertexDataCacheInvalid = true;
 		}
 		
 		/** Pauses the Video EventListeners (drawing/uploading) but the NetStream will not be affected.
@@ -623,7 +602,7 @@ package de.flintfabrik.starling.display
 		/** Readjusts the dimensions of the video according to the current video/croppingFrame.
 		 *  Further it resets drawnFrames, uploadedFrames as well as drawTime and uploadTime values.
 		 */
-		private function readjustSize(rectangle:Rectangle = null):void
+		private function _readjustSize(rectangle:Rectangle = null):void
 		{
 			if (!contextStatus)
 				return;
@@ -651,17 +630,10 @@ package de.flintfabrik.starling.display
 			mFrame = newFrame;
 			mFrameMatrix = new Matrix(1, 0, 0, 1, -mFrame.x, -mFrame.y);
 			
-			if (mVertexData)
-			{
-				mVertexData.setPosition(0, 0.0, 0.0);
-				mVertexData.setPosition(1, mFrame.width, 0.0);
-				mVertexData.setPosition(2, 0.0, mFrame.height);
-				mVertexData.setPosition(3, mFrame.width, mFrame.height);
-				onVertexDataChanged();
-			}
-			
 			if (!texture)
-				_texture = starling.textures.Texture.fromBitmapData(mBitmapData, false) as starling.textures.Texture;
+				_texture = starling.textures.Texture.fromBitmapData(mBitmapData);
+			
+			super.readjustSize(mFrame.width, mFrame.height);
 			
 			dispatchEventWith(starling.events.Event.RESIZE, false);
 		}
@@ -676,10 +648,12 @@ package de.flintfabrik.starling.display
 		}
 		
 		/** @inheritDoc */
-		public override function render(support:RenderSupport, parentAlpha:Number):void
+		override public function render(painter:Painter):void
 		{
-			if (mTexture)
-				support.batchQuad(this, parentAlpha, mTexture, mSmoothing);
+			if (pixelSnapping)
+				MatrixUtil.snapToPixels(painter.state.modelviewMatrix, painter.pixelSize);
+			
+			painter.batchMesh(this);
 		}
 		
 		/**
@@ -699,7 +673,7 @@ package de.flintfabrik.starling.display
 				disposeVideo();
 				setupVideo(width, height)
 				var rect:Rectangle = new Rectangle(0, 0, mVideo.width, mVideo.height);
-				readjustSize(rect);
+				_readjustSize(rect);
 				onVideoChange();
 			}
 		}
@@ -749,11 +723,11 @@ package de.flintfabrik.starling.display
 		 */
 		private function updateVertexData():void
 		{
-			mVertexData.setTexCoords(0, mFlipHorizontal ? 1.0 : 0.0, mFlipVertical ? 1.0 : 0.0);
-			mVertexData.setTexCoords(1, mFlipHorizontal ? 0.0 : 1.0, mFlipVertical ? 1.0 : 0.0);
-			mVertexData.setTexCoords(2, mFlipHorizontal ? 1.0 : 0.0, mFlipVertical ? 0.0 : 1.0);
-			mVertexData.setTexCoords(3, mFlipHorizontal ? 0.0 : 1.0, mFlipVertical ? 0.0 : 1.0);
-			mVertexDataCacheInvalid = true;
+			texture.setTexCoords(vertexData, 0, "texCoords", mFlipHorizontal ? 1.0 : 0.0, mFlipVertical ? 1.0 : 0.0);
+			texture.setTexCoords(vertexData, 1, "texCoords", mFlipHorizontal ? 0.0 : 1.0, mFlipVertical ? 1.0 : 0.0);
+			texture.setTexCoords(vertexData, 2, "texCoords", mFlipHorizontal ? 1.0 : 0.0, mFlipVertical ? 0.0 : 1.0);
+			texture.setTexCoords(vertexData, 3, "texCoords", mFlipHorizontal ? 0.0 : 1.0, mFlipVertical ? 0.0 : 1.0);
+			setRequiresRedraw();
 		}
 		
 		/**
@@ -777,6 +751,7 @@ package de.flintfabrik.starling.display
 				mStatsUploadTime.pop();
 			++mStatsUploadedFrames;
 			dispatchEventWith(de.flintfabrik.starling.events.VideoEvent.UPLOAD_COMPLETE);
+			setRequiresRedraw();
 		}
 		
 		/**
@@ -864,7 +839,7 @@ package de.flintfabrik.starling.display
 		}
 		
 		/**
-		 * Returns the number of drawn frames since the last call of start(), stop(), pause() or readjustSize()
+		 * Returns the number of drawn frames since the last call of start(), stop(), pause() or _readjustSize()
 		 */
 		public function get drawnFrames():uint
 		{
@@ -964,7 +939,7 @@ package de.flintfabrik.starling.display
 		}
 		
 		/**
-		 * Returns the number of uploaded frames since the last call of start(), stop(), pause() or readjustSize()
+		 * Returns the number of uploaded frames since the last call of start(), stop(), pause() or _readjustSize()
 		 */
 		public function get uploadedFrames():uint
 		{
@@ -991,7 +966,7 @@ package de.flintfabrik.starling.display
 		/** The texture with the video image. Can be used in other DisplayObjects then the Video as well.
 		 *  Note: The texture will never be transformed by the use of flipHorizontal/flipVertical.
 		 */
-		public function get texture():starling.textures.Texture
+		override public function get texture():starling.textures.Texture
 		{
 			return mTexture;
 		}
@@ -1006,10 +981,9 @@ package de.flintfabrik.starling.display
 			{
 				if (mTexture)
 					mTexture.dispose();
-				mTexture = value;
+				super.style.texture = mTexture = value;
 				mTextureClass = Class(getDefinitionByName(getQualifiedClassName(mTexture.base)));
-				mVertexData.setPremultipliedAlpha(mTexture.premultipliedAlpha);
-				onVertexDataChanged();
+				vertexData.setPremultipliedAlpha(mTexture.premultipliedAlpha, true);
 			}
 		}
 		
@@ -1045,7 +1019,7 @@ package de.flintfabrik.starling.display
 			if (mActive && (mAddedToStage || mForceRecording))
 				mVideo.addEventListener(flash.events.Event.ENTER_FRAME, video_enterFrameHandler, false, 0, true);
 			
-			readjustSize();
+			_readjustSize();
 		}
 	
 	}
